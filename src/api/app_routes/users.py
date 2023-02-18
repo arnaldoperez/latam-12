@@ -1,10 +1,11 @@
 from datetime import date, time, datetime, timezone, timedelta
-from api.models import db, User, TokenBlockedList
+from api.models import db, User, TokenBlockedList, Imagen
 from flask_jwt_extended import create_access_token, create_refresh_token,get_jti, jwt_required, get_jwt_identity, get_jwt
 from api.utils import generate_sitemap, APIException
 from flask_bcrypt import Bcrypt
 from flask import Flask, Blueprint, request, jsonify
 from firebase_admin import storage
+from ..sendmail import mailtemplate_password_recovery, send_mail
 import tempfile
 
 
@@ -13,9 +14,8 @@ bcrypt=Bcrypt(app)
 
 apiUser = Blueprint('apiUser', __name__)
 
-@apiUser.route("/helloUser",methods=["GET"])
-def helloUser():
-    
+@apiUser.route("/hellouser",methods=["GET"])
+def helloUser():    
     return "Hello User", 200
 
 @apiUser.route('/login', methods=['POST'])
@@ -29,15 +29,19 @@ def login():
     if user is None:
         return jsonify({"message":"Login failed"}), 401
     
-    # Validar clave
-    
+    # Validar clave    
     if not bcrypt.check_password_hash(user.password, password):
         return jsonify({"message":"Wrong password"}), 401
     
-    access_token = create_access_token(identity=user.id,additional_claims={"role":"admin"})
-    access_token_jti=get_jti(access_token)
-    refresh_token=create_refresh_token(identity=user.id, additional_claims={"accessToken":access_token_jti,"role":"admin"})
-    return jsonify({"token":access_token, "refreshToken":refresh_token})
+    if(user.is_admin):
+        claims={"role":"admin"}
+    else:
+        claims={"role":"client"}
+
+    access_token = create_access_token(identity=user.id, additional_claims=claims)
+    claims["access_jti"]=get_jti(access_token)
+    refresh_token=create_refresh_token(identity=user.id, additional_claims=claims)
+    return jsonify({"accessToken":access_token, "refreshToken":refresh_token})
 
 @apiUser.route('/signup', methods=['POST'])
 def signup():
@@ -45,7 +49,7 @@ def signup():
     password = request.json.get("password", None)
     try:
         password=bcrypt.generate_password_hash(password,10).decode("utf-8")
-        user = User(email=email, password=password, is_active=True)
+        user = User(email=email, password=password, is_active=True, is_admin=False)
         db.session.add(user)
         db.session.commit()
         return jsonify({"message":"Usuario registrado"}), 201
@@ -59,53 +63,59 @@ def signup():
 def refreshToken():
     claims=get_jwt()
     refreshToken = claims["jti"]
-    accessToken = claims["accessToken"]
-    role=claims['role']
-    now = datetime.now(timezone.utc)
+    accessToken = claims["access_jti"]
     id=get_jwt_identity()
+    now = datetime.now(timezone.utc)
     accessTokenBlocked = TokenBlockedList(token=accessToken, created_at=now, email=get_jwt_identity())
     refreshTokenBlocked = TokenBlockedList(token=refreshToken, created_at=now, email=get_jwt_identity())
     db.session.add(accessTokenBlocked)
     db.session.add(refreshTokenBlocked)
     db.session.commit()
-    access_token = create_access_token(identity=id,additional_claims={"role":role})
-    access_token_jti=get_jti(access_token)
-    refresh_token=create_refresh_token(identity=id, additional_claims={"accessToken":access_token_jti, "role":role})
-    return jsonify({"token":access_token, "refreshToken":refresh_token})
-
-
-
+    claims={"role":claims['role']}
+    access_token = create_access_token(identity=id,additional_claims=claims)
+    claims["access_jti"]=get_jti(access_token)
+    refresh_token=create_refresh_token(identity=id, additional_claims=claims)
+    return jsonify({"accessToken":access_token, "refreshToken":refresh_token})
 
 @apiUser.route('/uploadPhoto', methods=['POST'])
 @jwt_required()
 def uploadPhoto():
+    user_id=get_jwt_identity()
+    user = User.query.get(user_id)
+    if user is None:
+        return "Usuario no encontrado", 403
+
     # Se recibe un archivo en la peticion
     file=request.files['profilePic']
     # Extraemos la extension del archivo
     extension=file.filename.split(".")[1]
-    # Se genera el nombre de archivo con el id de la imagen y la extension
-    filename="profiles/" + str(get_jwt_identity()) + "." + extension
     # Guardar el archivo recibido en un archivo temporal
     temp = tempfile.NamedTemporaryFile(delete=False)
     file.save(temp.name)
     # Subir el archivo a firebase
     ## Se llama al bucket
-    bucket=storage.bucket(name="testflask-680bf.appspot.com")
+    bucket=storage.bucket(name="clase-imagenes-flask.appspot.com")
+    # Se genera el nombre de archivo con el id de la imagen y la extension
+    filename="profiles/" + str(user_id) + "." + extension
     ## Se hace referencia al espacio dentro del bucket
-    blob = bucket.blob(filename)
+    resource = bucket.blob(filename)
     ## Se sube el archivo temporal al espacio designado en el bucket
     # Se debe especificar el tipo de contenido en base a la extension
-    blob.upload_from_filename(temp.name,content_type="image/"+extension)
+    resource.upload_from_filename(temp.name,content_type="image/"+extension)
     
-    #Buscamos el usuario en la BD partiendo del id del token
-    user = User.query.get(get_jwt_identity())
-    if user is None:
-        return "Usuario no encontrado", 403
-    # Actualizar el campo de la foto
-    user.picture=filename
-    # Se crear el registro en la base de datos 
-    db.session.add(user)
-    db.session.commit()
+    # Guardar imagen en base de datos si no existe previamente
+    if Imagen.query.filter(Imagen.resource_path==filename).first() is None:
+        new_image=Imagen(resource_path=filename, description="Profile photo of user "+ str(user_id))
+        db.session.add(new_image)
+        # Procesar las operaciones de la base de datos, pero sin cerrarla para poder 
+        # ejecutar mas operaciones posteriormente
+        db.session.flush()
+        #Buscamos el usuario en la BD partiendo del id del token
+        # Actualizar el campo de la foto
+        user.profile_picture_id=new_image.id
+        # Se crear el registro en la base de datos 
+        db.session.add(user)
+        db.session.commit()
     
     return "Ok", 200
 
@@ -122,7 +132,7 @@ def handle_hello_protected():
         "user_email": user.email
     }
 
-    return jsonify(user.serialize()), 200
+    return jsonify(response_body), 200
 
 
 @apiUser.route('/getPhoto', methods=['GET'])
@@ -133,17 +143,7 @@ def getPhoto():
     if user is None:
         return "Usuario no encontrado", 403
    
-    # Subir el archivo a firebase
-    ## Se llama al bucket
-    bucket=storage.bucket(name="testflask-680bf.appspot.com")
-    ## Se hace referencia al espacio dentro del bucket
-    blob = bucket.blob(user.picture)
-    ## Se sube el archivo temporal al espacio designado en el bucket
-    url=blob.generate_signed_url(version="v4",
-        # This URL is valid for 15 minutes
-        expiration=timedelta(minutes=15),
-        # Allow GET requests using this URL.
-        method="GET")
+    url=user.profile_picture.image_url()
         
     return jsonify({"pictureUrl":url}), 200
 
@@ -158,3 +158,40 @@ def destroyToken():
     db.session.commit()
 
     return jsonify(msg="Acceso revocado")
+
+@apiUser.route('/resetpassword', methods=['POST'])
+@jwt_required()
+def reset_password():
+    claims=get_jwt()
+    if claims['role']=="password":
+        id_user=get_jwt_identity()
+        user=User.query.get(id_user)
+        request_password=request.json.get('password')
+        password=bcrypt.generate_password_hash(request_password,10).decode("utf-8")
+        user.password=password
+        db.session.add(user)
+        db.session.flush()
+        now = datetime.now(timezone.utc)
+        tokenBlocked = TokenBlockedList(token=claims['jti'], created_at=now, email=get_jwt_identity())
+        db.session.add(tokenBlocked)
+        db.session.commit()
+        return jsonify({"msg":"Clave cambiada"}), 200
+    else:
+        return jsonify({"msg":"Cambio de clave no permitido"}), 401
+    
+@apiUser.route('/requestresetpassword', methods=['POST'])
+def request_password_reset():
+    email=request.json.get('email')
+    user=User.query.filter(User.email==email).first()
+    if user is None:
+        return jsonify({"msg":"Enlace de reinicio de contraseña enviado al correo"})
+
+    claims={"role":"password"}
+    delta=timedelta(minutes=5)
+    password_token=create_access_token(identity=user.id,additional_claims=claims, expires_delta=delta)
+    # ToDo: Envio de enlace por correo aqui
+    template=mailtemplate_password_recovery(password_token)
+    if send_mail(email, template):
+        return jsonify({"msg":"Enlace de reinicio de contraseña enviado al correo"})
+    else:
+        return jsonify({"msg":"Error en reinicio de contraseña"})

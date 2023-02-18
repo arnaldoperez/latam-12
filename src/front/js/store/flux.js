@@ -1,11 +1,14 @@
-const getState = ({ getStore, getActions, setStore }) => {
+const getState = ({
+  getStore,
+  getActions,
+  setStore
+}) => {
   return {
     store: {
       message: null,
       token: "",
       profilePic: "",
-      demo: [
-        {
+      demo: [{
           title: "FIRST",
           background: "white",
           initial: "white",
@@ -22,13 +25,26 @@ const getState = ({ getStore, getActions, setStore }) => {
       exampleFunction: () => {
         getActions().changeColor(0, "green");
       },
+      refreshToken: async () => {
+        // Token has expired
+      },
+      getAuthorizationHeaders: async () => {
+        let {
+          token
+        } = getStore
+        return {
+          Authorization: "Bearer " + token
+        }
 
+      },
       getMessage: async () => {
         try {
           // fetching data from the backend
           const resp = await fetch(process.env.BACKEND_URL + "/api/hello");
           const data = await resp.json();
-          setStore({ message: data.message });
+          setStore({
+            message: data.message
+          });
           // don't forget to return something, that is how the async resolves
           return data;
         } catch (error) {
@@ -47,13 +63,17 @@ const getState = ({ getStore, getActions, setStore }) => {
         });
 
         //reset the global store
-        setStore({ demo: demo });
+        setStore({
+          demo: demo
+        });
       },
       fetchGenerico: async (endpoint, data, metodo) => {
         let url = process.env.BACKEND_URL;
         let response = await fetch(url + endpoint, {
           method: metodo,
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify(data),
         });
         return response;
@@ -63,21 +83,42 @@ const getState = ({ getStore, getActions, setStore }) => {
         console.log(url);
         let response = await fetch(url + "/api/login", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json"
+          },
           body: JSON.stringify(data),
         });
         let responseJson = await response.json();
         console.log(responseJson.token);
-        let token = responseJson.token;
-        let picResponse = await fetch(url + "/api/getPhoto", {
-          method: "GET",
-          headers: { Authorization: "Bearer " + token },
-        });
-        let profilePic = (await picResponse.json()).pictureUrl;
-        setStore({ token: token, profilePic }); //reseteo todo el store
+        let accessToken = responseJson.accessToken;
+        let refreshToken = responseJson.refreshToken;
+
+        setStore({
+          token: token
+        }); //reseteo todo el store
+        getActions().getPhoto()
         return response;
       },
-
+      getPhoto: async () => {
+        let url = process.env.BACKEND_URL;
+        let {
+          token
+        } = getStore()
+        let {
+          getAuthorizationHeaders
+        } = getActions()
+        let picResponse = await fetch(url + "/api/getPhoto", {
+          method: "GET",
+          headers: {
+            ...getAuthorizationHeaders(),
+            "Access-Control-Allow-Origin": "*"
+          },
+        });
+        let profilePic = (await picResponse.json()).pictureUrl;
+        setStore({
+          profilePic
+        });
+      },
       fetchProtegido: async (endpoint, data = undefined, metodo = "GET") => {
         const store = getStore();
         let url = process.env.URL_BACKEND;
@@ -93,6 +134,11 @@ const getState = ({ getStore, getActions, setStore }) => {
         let response = await fetch(url + endpoint, encabezado);
         return response;
       },
+      setToken(token) {
+        setStore({
+          token
+        })
+      }
     },
   };
 };

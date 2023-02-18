@@ -7,7 +7,7 @@ verify_ssl = true
 
 [packages]
 flask = "*"
-sqlalchemy = "*"
+sqlalchemy = "==1.4.46"
 flask-sqlalchemy = "*"
 flask-migrate = "*"
 flask-swagger = "*"
@@ -20,6 +20,7 @@ flask-admin = "*"
 flask-jwt-extended = "*"
 flask-bcrypt = "*"
 firebase-admin = "*"
+sendgrid = "*"
 
 [requires]
 python_version = "3.8"

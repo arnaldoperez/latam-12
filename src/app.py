@@ -11,11 +11,17 @@ from api.models import db, TokenBlockedList
 from api.routes import api
 from api.admin import setup_admin
 from api.commands import setup_commands
+from firebase_admin import auth
 from flask_jwt_extended import JWTManager
 from flask_bcrypt import Bcrypt
 from api.app_routes.users import apiUser
+
 import firebase_admin
 from firebase_admin import credentials
+
+cred = credentials.Certificate("firebase-credentials.json")
+firebase_admin.initialize_app(cred)
+
 #from models import Person
 
 ENV = os.getenv("FLASK_ENV")
@@ -26,15 +32,39 @@ app.url_map.strict_slashes = False
 
 # Configuracion de JWT
 app.config["JWT_SECRET_KEY"] = os.getenv("FLASK_APP_KEY")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = 60
 jwt = JWTManager(app)
 
 @jwt.token_in_blocklist_loader
 def check_token_blocklist(jwt_header, jwt_payload)-> bool:
+    if jwt_payload['role']=="password" and request.path!="/api/resetpassword":
+        return True
+    if jwt_payload["type"]=="refresh":
+        token_is_blocked=TokenBlockedList.query.filter_by(token=jwt_payload['access_jti']).first()
+        if token_is_blocked is not None:
+            return True
+
     TokenBlocked = TokenBlockedList.query.filter_by(token=jwt_payload['jti']).first()
     if isinstance(TokenBlocked, TokenBlockedList):
         return True
     else:
-        return False    
+        return False
+
+@jwt.token_verification_loader
+def custom_verify_token(jwt_header, jwt_payload)-> bool:
+    print("Verificacion")
+    try:
+        token=request.Authorization.split(" ")[1]
+        print(token)
+        decoded_token = auth.verify_id_token(id_token)
+        uid = decoded_token['uid']
+        if uid is None:
+            return False
+        return True
+    except:
+        print("error")
+        return False
+
 
 # Configuracion de BCrypt
 
@@ -70,7 +100,7 @@ def handle_invalid_usage(error):
 # generate sitemap with all your endpoints
 @app.route('/')
 def sitemap():
-    print(app.url_map)
+    #print(app.url_map)
     if ENV == "development":
         return generate_sitemap(app)
     return send_from_directory(static_file_dir, 'index.html')
@@ -83,9 +113,6 @@ def serve_any_other_file(path):
     response = send_from_directory(static_file_dir, path)
     response.cache_control.max_age = 0 # avoid cache memory
     return response
-
-cred=credentials.Certificate("fb_credentials.json")
-firebase_admin.initialize_app(cred)
 
 # this only runs if `$ python src/main.py` is executed
 if __name__ == '__main__':

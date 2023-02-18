@@ -1,6 +1,7 @@
 import React, { useContext } from "react";
 import { Context } from "../store/appContext";
-import rigoImageUrl from "../../img/rigo-baby.jpg";
+import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import firebaseApp from "../firebase";
 import "../../styles/home.css";
 import { useNavigate } from "react-router-dom";
 
@@ -18,6 +19,31 @@ export const Login = () => {
            return response;
        } */
 
+  async function firebaseAuth() {
+    const auth = getAuth();
+    const provider = new GoogleAuthProvider();
+    auth.languageCode = "es";
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      console.log(credential);
+      // Token e informacion del usuario
+      const token = credential.idToken;
+      const user = result.user;
+      console.log(user);
+      actions.setToken(token);
+    } catch (error) {
+      // Handle Errors here.
+      const errorCode = error.code;
+      const errorMessage = error.message;
+      // The email of the user's account used.
+      const email = error.customData.email;
+      // The AuthCredential type that was used.
+      const credential = GoogleAuthProvider.credentialFromError(error);
+      console.error(error);
+    }
+  }
+
   const login = async (e) => {
     e.preventDefault();
     console.log("entre en la función");
@@ -27,7 +53,6 @@ export const Login = () => {
     let email = data.get("email");
     let password = data.get("password");
 
-    let url = process.env.URL_BACKEND;
     let obj = {
       email: email,
       password: password,
@@ -47,7 +72,13 @@ export const Login = () => {
     }
   };
   const prueba = async () => {
-    let response = await actions.fetchProtegido("helloprotected");
+    //let response = await actions.fetchProtegido("helloprotected");
+    let response = await fetch(
+      "https://3001-arnaldopere-jwtflaskdem-rdap7shh02y.ws-us85.gitpod.io/api/helloprotected",
+      {
+        headers: { Authorization: "Bearer " + store.token },
+      }
+    );
     console.log(await response.json());
   };
 
@@ -58,7 +89,7 @@ export const Login = () => {
           <div className="row d-flex">
             <div className="col">
               <div className="row">
-                <h1>Email</h1>
+                <h1> Email </h1>
               </div>
               <div className="row">
                 <input
@@ -68,7 +99,7 @@ export const Login = () => {
                 />
               </div>
               <div className="row">
-                <h1>Password</h1>
+                <h1> Password </h1>
               </div>
               <div className="row">
                 <input
@@ -93,8 +124,17 @@ export const Login = () => {
                   Prueba
                 </button>
               </div>
+              <div className="row">
+                <button
+                  className="btn btn-outline-success"
+                  type="button"
+                  onClick={firebaseAuth}
+                >
+                  Login con Google
+                </button>
+              </div>
             </div>
-            <div className="col"></div>
+            <div className="col"> </div>
           </div>
         </form>
       </div>
