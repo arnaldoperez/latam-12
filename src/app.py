@@ -19,7 +19,9 @@ from api.app_routes.users import apiUser
 import firebase_admin
 from firebase_admin import credentials
 
-cred = credentials.Certificate("firebase-credentials.json")
+credentials_file=os.path.abspath(os.curdir) + "/firebase-credentials.json"
+print(credentials_file)
+cred = credentials.Certificate(credentials_file)
 firebase_admin.initialize_app(cred)
 
 #from models import Person
