@@ -6,6 +6,7 @@ npm install
 npm run build
 
 pipenv install
-cp /etc/secrets/firebase_credentials.json .
+cp /etc/secrets/firebase_credentials.json ./firebase_credentials.json
+cat firebase_credentials.json
 
 pipenv run reset_db
