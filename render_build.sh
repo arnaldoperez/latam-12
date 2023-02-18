@@ -8,7 +8,7 @@ npm run build
 pipenv install
 cp /etc/secrets/firebase_credentials.json ./firebase_credentials.json
 
-if [ ! -d "/migrations" ];
+if [ ! -d "./migrations" ];
 then
     echo "NO MIGRATIONS"
     pipenv run init
