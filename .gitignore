@@ -83,3 +83,4 @@ firebase-credentials.json
 !.gitpod.yml
 !render.yml
 !.render-buildpacks.json
+migrations
