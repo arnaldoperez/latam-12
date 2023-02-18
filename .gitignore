@@ -76,3 +76,10 @@ __pycache__/
 
 #Credenciales firebase
 firebase-credentials.json
+
+# do not ignore gitpod and render files
+!.gitpod.Dockerfile
+!Dockerfile.render
+!.gitpod.yml
+!render.yml
+!.render-buildpacks.json
