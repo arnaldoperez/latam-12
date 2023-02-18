@@ -9,4 +9,5 @@ pipenv install
 cp /etc/secrets/firebase_credentials.json ./firebase_credentials.json
 
 
-pipenv run reset_db
+pipenv run migrate
+pipenv run upgrade
