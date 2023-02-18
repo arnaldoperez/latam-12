@@ -23,6 +23,7 @@ firebase-admin = "*"
 sendgrid = "*"
 importlib-metadata = "*"
 importlib-resources = "*"
+typing-extensions = "*"
 
 [requires]
 python_version = "3.8"
