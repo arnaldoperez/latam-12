@@ -8,7 +8,8 @@ npm run build
 pipenv install
 cp /etc/secrets/firebase_credentials.json ./firebase_credentials.json
 
-if [!-d "./migrations"] then
+if [!-d "./migrations"]
+then
     pipenv run init
     pipenv run migrate
 fi
